@@ -32,22 +32,23 @@ object LowLevelAPI extends App {
   }
 
   /*
+  --------------------------------------------------------
     Method 1: synchronously serve HTTP responses
+    "[bindAndHandleSync]"
+  --------------------------------------------------------
    */
   val requestHandler: HttpRequest => HttpResponse = {
     case HttpRequest(HttpMethods.GET, _, _, _, _) =>
       HttpResponse(
         StatusCodes.OK, // HTTP 200
-        entity = HttpEntity(
-          ContentTypes.`text/html(UTF-8)`,
-          """
+        entity =
+          HttpEntity(ContentTypes.`text/html(UTF-8)`, """
             |<html>
             | <body>
             |   Hello from Akka HTTP!
             | </body>
             |</html>
-          """.stripMargin
-        )
+          """.stripMargin)
       )
 
     case request: HttpRequest =>
@@ -67,99 +68,108 @@ object LowLevelAPI extends App {
       )
   }
 
-  val httpSyncConnectionHandler = Sink.foreach[IncomingConnection] { connection =>
-    connection.handleWithSyncHandler(requestHandler)
-  }
-
+  // manual version:
+  //  val httpSyncConnectionHandler = Sink.foreach[IncomingConnection] { connection =>
+  //    connection.handleWithSyncHandler(requestHandler)
+  //  }
   //  Http().bind("localhost", 8080).runWith(httpSyncConnectionHandler)
 
   // shorthand version:
-  // Http().bindAndHandleSync(requestHandler, "localhost", 8080)
-
+  Http().bindAndHandleSync(requestHandler, "localhost", 8080)
 
   /*
-    Method 2: serve back HTTP response ASYNCHRONOUSLY
+  --------------------------------------------------------
+    Method 2: serve back HTTP response ASYNCHRONOUSLY - wrap in a "future"
+    "[bindAndHandleAsync]"
+  --------------------------------------------------------
    */
   val asyncRequestHandler: HttpRequest => Future[HttpResponse] = {
-    case HttpRequest(HttpMethods.GET, Uri.Path("/home"), _, _, _) =>  // method, URI, HTTP headers, content and the protocol (HTTP1.1/HTTP2.0)
-      Future(HttpResponse(
-        StatusCodes.OK, // HTTP 200
-        entity = HttpEntity(
-          ContentTypes.`text/html(UTF-8)`,
-          """
+    case HttpRequest(HttpMethods.GET, Uri.Path("/home"), _, _, _) => // method, URI, HTTP headers, content and the protocol (HTTP1.1/HTTP2.0)
+      Future(
+        HttpResponse(
+          StatusCodes.OK, // HTTP 200
+          entity = HttpEntity(
+            ContentTypes.`text/html(UTF-8)`,
+            """
             |<html>
             | <body>
             |   Hello from Akka HTTP!
             | </body>
             |</html>
           """.stripMargin
+          )
         )
-      ))
+      )
 
     case request: HttpRequest =>
       request.discardEntityBytes()
-      Future(HttpResponse(
-        StatusCodes.NotFound, // 404
-        entity = HttpEntity(
-          ContentTypes.`text/html(UTF-8)`,
-          """
+      Future(
+        HttpResponse(
+          StatusCodes.NotFound, // 404
+          entity = HttpEntity(
+            ContentTypes.`text/html(UTF-8)`,
+            """
             |<html>
             | <body>
             |   OOPS! The resource can't be found.
             | </body>
             |</html>
           """.stripMargin
+          )
         )
-      ))
+      )
   }
 
-  val httpAsyncConnectionHandler = Sink.foreach[IncomingConnection] { connection =>
-    connection.handleWithAsyncHandler(asyncRequestHandler)
-  }
-
-  // streams-based "manual" version
+  // streams-based "manual" version:
+  //  val httpAsyncConnectionHandler = Sink.foreach[IncomingConnection] { connection =>
+  //    connection.handleWithAsyncHandler(asyncRequestHandler)
+  //  }
   //  Http().bind("localhost", 8081).runWith(httpAsyncConnectionHandler)
 
-  // shorthand version
+  // shorthand version:
   Http().bindAndHandleAsync(asyncRequestHandler, "localhost", 8081)
 
   /*
+   --------------------------------------------------------
     Method 3: async via Akka streams
+    "[bindAndHandle]"
+     --------------------------------------------------------
    */
-  val streamsBasedRequestHandler: Flow[HttpRequest, HttpResponse, _] = Flow[HttpRequest].map {
-    case HttpRequest(HttpMethods.GET, Uri.Path("/home"), _, _, _) =>  // method, URI, HTTP headers, content and the protocol (HTTP1.1/HTTP2.0)
-      HttpResponse(
-        StatusCodes.OK, // HTTP 200
-        entity = HttpEntity(
-          ContentTypes.`text/html(UTF-8)`,
-          """
+  val streamsBasedRequestHandler: Flow[HttpRequest, HttpResponse, _] =
+    Flow[HttpRequest].map {
+      case HttpRequest(HttpMethods.GET, Uri.Path("/home"), _, _, _) => // method, URI, HTTP headers, content and the protocol (HTTP1.1/HTTP2.0)
+        HttpResponse(
+          StatusCodes.OK, // HTTP 200
+          entity = HttpEntity(
+            ContentTypes.`text/html(UTF-8)`,
+            """
             |<html>
             | <body>
             |   Hello from Akka HTTP!
             | </body>
             |</html>
           """.stripMargin
+          )
         )
-      )
 
-    case request: HttpRequest =>
-      request.discardEntityBytes()
-      HttpResponse(
-        StatusCodes.NotFound, // 404
-        entity = HttpEntity(
-          ContentTypes.`text/html(UTF-8)`,
-          """
+      case request: HttpRequest =>
+        request.discardEntityBytes()
+        HttpResponse(
+          StatusCodes.NotFound, // 404
+          entity = HttpEntity(
+            ContentTypes.`text/html(UTF-8)`,
+            """
             |<html>
             | <body>
             |   OOPS! The resource can't be found.
             | </body>
             |</html>
           """.stripMargin
+          )
         )
-      )
-  }
+    }
 
-  // "manual" version
+  // "manual" version:
   //  Http().bind("localhost", 8082).runForeach { connection =>
   //    connection.handleWith(streamsBasedRequestHandler)
   //  }
@@ -167,13 +177,13 @@ object LowLevelAPI extends App {
   // shorthand version
   Http().bindAndHandle(streamsBasedRequestHandler, "localhost", 8082)
 
-  /**
+  /** --------------------------------------------------------------------------------------------
     * Exercise: create your own HTTP server running on localhost on 8388, which replies
     *   - with a welcome message on the "front door" localhost:8388
     *   - with a proper HTML on localhost:8388/about
     *   - with a 404 message otherwise
+    *   --------------------------------------------------------------------------------------------
     */
-
   val syncExerciseHandler: HttpRequest => HttpResponse = {
     case HttpRequest(HttpMethods.GET, Uri.Path("/"), _, _, _) =>
       HttpResponse(
@@ -219,11 +229,14 @@ object LowLevelAPI extends App {
       )
   }
 
-  val bindingFuture = Http().bindAndHandleSync(syncExerciseHandler, "localhost", 8388)
+  val bindingFuture =
+    Http().bindAndHandleSync(syncExerciseHandler, "localhost", 8388)
 
   // shutdown the server:
+  /*
   bindingFuture
     .flatMap(binding => binding.unbind())
     .onComplete(_ => system.terminate())
+ */
 
 }
