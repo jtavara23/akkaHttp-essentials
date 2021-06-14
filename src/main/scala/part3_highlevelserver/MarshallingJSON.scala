@@ -9,7 +9,7 @@ import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.unmarshalling.FromRequestUnmarshaller
 import akka.pattern.ask
 import akka.util.Timeout
-// step 1
+// -- step 1
 import spray.json._
 
 import scala.concurrent.duration._
@@ -41,7 +41,8 @@ class GameAreaMap extends Actor with ActorLogging {
 
     case GetPlayersByClass(characterClass) =>
       log.info(s"Getting all players with the character class $characterClass")
-      sender() ! players.values.toList.filter(_.characterClass == characterClass)
+      sender() ! players.values.toList
+        .filter(_.characterClass == characterClass)
 
     case AddPlayer(player) =>
       log.info(s"Trying to add player $player")
@@ -55,16 +56,17 @@ class GameAreaMap extends Actor with ActorLogging {
   }
 }
 
-// step 2
+//-- step 2
 trait PlayerJsonProtocol extends DefaultJsonProtocol {
   implicit val playerFormat = jsonFormat3(Player)
 }
 
-object MarshallingJSON extends App
-  // step 3
-  with PlayerJsonProtocol
-  // step 4
-  with SprayJsonSupport {
+object MarshallingJSON
+    extends App
+    // -- step 3
+    with PlayerJsonProtocol
+    // -- step 4
+    with SprayJsonSupport {
 
   implicit val system = ActorSystem("MarshallingJSON")
   implicit val materializer = ActorMaterializer()
@@ -93,15 +95,18 @@ object MarshallingJSON extends App
 
   implicit val timeout = Timeout(2 seconds)
   val rtjvmGameRouteSkel =
-    pathPrefix("api" / "player") {
+    pathPrefix("api" / "player") { // all the paths starts with '/api/player'
       get {
         path("class" / Segment) { characterClass =>
-          val playersByClassFuture = (rtjvmGameMap ? GetPlayersByClass(characterClass)).mapTo[List[Player]]
+          val playersByClassFuture =
+            (rtjvmGameMap ? GetPlayersByClass(characterClass))
+              .mapTo[List[Player]]
           complete(playersByClassFuture)
 
         } ~
           (path(Segment) | parameter('nickname)) { nickname =>
-            val playerOptionFuture = (rtjvmGameMap ? GetPlayer(nickname)).mapTo[Option[Player]]
+            val playerOptionFuture =
+              (rtjvmGameMap ? GetPlayer(nickname)).mapTo[Option[Player]]
             complete(playerOptionFuture)
           } ~
           pathEndOrSingleSlash {
@@ -109,13 +114,19 @@ object MarshallingJSON extends App
           }
       } ~
         post {
-          entity(implicitly[FromRequestUnmarshaller[Player]]) { player =>
-            complete((rtjvmGameMap ? AddPlayer(player)).map(_ => StatusCodes.OK))
+//          entity(implicitly[FromRequestUnmarshaller[Player]]) { player =>
+          // equivalent to:
+          entity(as[Player]) { player =>
+            complete(
+              (rtjvmGameMap ? AddPlayer(player)).map(_ => StatusCodes.OK)
+            )
           }
         } ~
-        delete {
+        delete { // entity(as[Player]) -> converts the payload to a player data structure
           entity(as[Player]) { player =>
-            complete((rtjvmGameMap ? RemovePlayer(player)).map(_ => StatusCodes.OK))
+            complete(
+              (rtjvmGameMap ? RemovePlayer(player)).map(_ => StatusCodes.OK)
+            )
           }
         }
     }
