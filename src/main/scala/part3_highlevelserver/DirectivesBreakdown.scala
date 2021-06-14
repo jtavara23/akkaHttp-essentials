@@ -3,7 +3,12 @@ package part3_highlevelserver
 import akka.actor.ActorSystem
 import akka.event.LoggingAdapter
 import akka.http.scaladsl.Http
-import akka.http.scaladsl.model.{ContentTypes, HttpEntity, HttpRequest, StatusCodes}
+import akka.http.scaladsl.model.{
+  ContentTypes,
+  HttpEntity,
+  HttpRequest,
+  StatusCodes
+}
 import akka.stream.ActorMaterializer
 
 object DirectivesBreakdown extends App {
@@ -13,9 +18,9 @@ object DirectivesBreakdown extends App {
   import system.dispatcher
   import akka.http.scaladsl.server.Directives._
 
-  /**
+  /**--------------------------------------------------------
     * Type #1: filtering directives
-    */
+    --------------------------------------------------------*/
   val simpleHttpMethodRoute =
     post { // equivalent directives for get, put, patch, delete, head, options
       complete(StatusCodes.Forbidden)
@@ -45,20 +50,19 @@ object DirectivesBreakdown extends App {
   val dontConfuse =
     path("api/myEndpoint") {
       complete(StatusCodes.OK)
-    }
+    } // this is: /api%2FmyEndpoint
 
   val pathEndRoute =
     pathEndOrSingleSlash { // localhost:8080 OR localhost:8080/
       complete(StatusCodes.OK)
     }
 
-  //  Http().bindAndHandle(complexPathRoute, "localhost", 8080)
+  Http().bindAndHandle(dontConfuse, "localhost", 8080)
 
-
-  /**
+  /**--------------------------------------------------------
     * Type #2: extraction directives
-    */
-
+    * [IntNumber] is a reserved variable
+    --------------------------------------------------------*/
   // GET on /api/item/42
   val pathExtractionRoute =
     path("api" / "item" / IntNumber) { (itemNumber: Int) =>
@@ -66,7 +70,7 @@ object DirectivesBreakdown extends App {
       println(s"I've got a number in my path: $itemNumber")
       complete(StatusCodes.OK)
     }
-
+  // GET on /api/order/42/45
   val pathMultiExtractRoute =
     path("api" / "order" / IntNumber / IntNumber) { (id, inventory) =>
       println(s"I've got TWO numbers in my path: $id, $inventory")
@@ -75,9 +79,10 @@ object DirectivesBreakdown extends App {
 
   val queryParamExtractionRoute =
     // /api/item?id=45
+//  symbols: 'variableName - held in a special memory zone, they are always compared by reference instead of content - performance benefits!!
     path("api" / "item") {
-      parameter('id.as[Int]) { (itemId: Int) =>
-        println(s"I've extracted the ID as $itemId")
+      parameter('id.as[Int]) { (itemWhateverId: Int) =>
+        println(s"I've extracted the ID as $itemWhateverId")
         complete(StatusCodes.OK)
       }
     }
@@ -92,12 +97,11 @@ object DirectivesBreakdown extends App {
       }
     }
 
-  Http().bindAndHandle(queryParamExtractionRoute, "localhost", 8080)
+  Http().bindAndHandle(extractRequestRoute, "localhost", 8081)
 
-  /**
+  /**--------------------------------------------------------
     * Type #3: composite directives
-    */
-
+    --------------------------------------------------------*/
   val simpleNestedRoute =
     path("api" / "item") {
       get {
@@ -110,49 +114,53 @@ object DirectivesBreakdown extends App {
   }
 
   val compactExtractRequestRoute =
-    (path("controlEndpoint") & extractRequest & extractLog) { (request, log) =>
-      log.info(s"I got the http request: $request")
-      complete(StatusCodes.OK)
+    (path("controlEndpoint") & extractRequest & extractLog) {
+      (httpRequest, log) =>
+        log.info(s"I got the http request: $httpRequest")
+        complete(StatusCodes.OK)
     }
 
-  // /about and /aboutUs
+  // accept only /about or /aboutUs
   val repeatedRoute =
     path("about") {
       complete(StatusCodes.OK)
     } ~
-    path("aboutUs") {
-      complete(StatusCodes.OK)
-    }
-
+      path("aboutUs") {
+        complete(StatusCodes.OK)
+      }
+  // accept only /about or /aboutUs
   val dryRoute =
     (path("about") | path("aboutUs")) {
       complete(StatusCodes.OK)
     }
 
-  // yourblog.com/42 AND yourblog.com?postId=42
-
+  // yourblog.com/42
   val blogByIdRoute =
     path(IntNumber) { (blogpostId: Int) =>
       // complex server logic
       complete(StatusCodes.OK)
     }
-
+  //yourblog.com?postId=42
   val blogByQueryParamRoute =
     parameter('postId.as[Int]) { (blogpostId: Int) =>
       // the SAME server logic
       complete(StatusCodes.OK)
     }
 
+  //unify both:  yourblog.com/42   or  yourblog.com?postId=42
+  // they need to extract the same type of values
   val combinedBlodByIdRoute =
     (path(IntNumber) | parameter('postId.as[Int])) { (blogpostId: Int) =>
       // your original server logic
+      print(s"my parameter sis $blogpostId")
       complete(StatusCodes.OK)
     }
 
-  /**
-    * Type #4: "actionable" directives
-    */
+  Http().bindAndHandle(combinedBlodByIdRoute, "localhost", 8082)
 
+  /**--------------------------------------------------------
+    * Type #4: "actionable" directives
+    --------------------------------------------------------*/
   val completeOkRoute = complete(StatusCodes.OK)
 
   val failedRoute =
@@ -161,6 +169,7 @@ object DirectivesBreakdown extends App {
     }
 
   val routeWithRejection =
+    // if we want to reject, well .. then we dont put it! lol
 //    path("home") {
 //      reject
 //    } ~
@@ -176,10 +185,10 @@ object DirectivesBreakdown extends App {
       get {
         completeOkRoute
       } ~
-      post {
-        complete(StatusCodes.Forbidden)
-      }
+        post {
+          complete(StatusCodes.Forbidden)
+        }
     }
 
-  Http().bindAndHandle(getOrPutPath, "localhost", 8081)
+  Http().bindAndHandle(getOrPutPath, "localhost", 8083)
 }
