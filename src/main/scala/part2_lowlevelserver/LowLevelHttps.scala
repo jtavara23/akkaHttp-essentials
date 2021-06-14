@@ -12,12 +12,15 @@ import javax.net.ssl.{KeyManagerFactory, SSLContext, TrustManagerFactory}
 object HttpsContext {
   // Step 1: key store
   val ks: KeyStore = KeyStore.getInstance("PKCS12")
-  val keystoreFile: InputStream = getClass.getClassLoader.getResourceAsStream("keystore.pkcs12")
+  val keystoreFile: InputStream =
+    getClass.getClassLoader.getResourceAsStream("keystore.pkcs12")
   // alternative: new FileInputStream(new File("src/main/resources/keystore.pkcs12"))
   val password = "akka-https".toCharArray // fetch the password from a secure place!
+  // initialize keystore with KSFile & password
   ks.load(keystoreFile, password)
 
   // Step 2: initialize a key manager
+  // SUNX509 is key manager algorithm that defines: provider and a content type
   val keyManagerFactory = KeyManagerFactory.getInstance("SunX509") // PKI = public key infrastructure
   keyManagerFactory.init(ks, password)
 
@@ -27,10 +30,15 @@ object HttpsContext {
 
   // Step 4: initialize an SSL context
   val sslContext: SSLContext = SSLContext.getInstance("TLS")
-  sslContext.init(keyManagerFactory.getKeyManagers, trustManagerFactory.getTrustManagers, new SecureRandom)
+  sslContext.init(
+    keyManagerFactory.getKeyManagers,
+    trustManagerFactory.getTrustManagers,
+    new SecureRandom
+  )
 
   // Step 5: return the https connection context
-  val httpsConnectionContext: HttpsConnectionContext = ConnectionContext.https(sslContext)
+  val httpsConnectionContext: HttpsConnectionContext =
+    ConnectionContext.https(sslContext)
 }
 
 object LowLevelHttps extends App {
@@ -38,22 +46,18 @@ object LowLevelHttps extends App {
   implicit val system = ActorSystem("LowLevelHttps")
   implicit val materrializer = ActorMaterializer()
 
-
-
   val requestHandler: HttpRequest => HttpResponse = {
     case HttpRequest(HttpMethods.GET, _, _, _, _) =>
       HttpResponse(
         StatusCodes.OK, // HTTP 200
-        entity = HttpEntity(
-          ContentTypes.`text/html(UTF-8)`,
-          """
+        entity =
+          HttpEntity(ContentTypes.`text/html(UTF-8)`, """
             |<html>
             | <body>
             |   Hello from Akka HTTP!
             | </body>
             |</html>
-          """.stripMargin
-        )
+          """.stripMargin)
       )
 
     case request: HttpRequest =>
@@ -73,6 +77,11 @@ object LowLevelHttps extends App {
       )
   }
 
-  val httpsBinding = Http().bindAndHandleSync(requestHandler, "localhost", 8443, HttpsContext.httpsConnectionContext)
+  val httpsBinding = Http().bindAndHandleSync(
+    requestHandler,
+    "localhost",
+    8443,
+    HttpsContext.httpsConnectionContext
+  )
 
 }
