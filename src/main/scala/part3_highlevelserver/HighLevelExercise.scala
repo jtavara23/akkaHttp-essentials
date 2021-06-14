@@ -22,7 +22,6 @@ object HighLevelExercise extends App with PersonJsonProtocol {
   implicit val materializer = ActorMaterializer()
   import system.dispatcher
 
-
   /**
     * Exercise:
     *
@@ -34,12 +33,7 @@ object HighLevelExercise extends App with PersonJsonProtocol {
     *     - extract the request
     *     - process the entity's data
     */
-
-  var people = List(
-    Person(1, "Alice"),
-    Person(2, "Bob"),
-    Person(3, "Charlie")
-  )
+  var people = List(Person(1, "Alice"), Person(2, "Bob"), Person(3, "Charlie"))
 
   val personServerRoute =
     pathPrefix("api" / "people") {
@@ -52,44 +46,49 @@ object HighLevelExercise extends App with PersonJsonProtocol {
             )
           )
         } ~
-        pathEndOrSingleSlash {
-          complete(
-            HttpEntity(
-              ContentTypes.`application/json`,
-              people.toJson.prettyPrint
+          pathEndOrSingleSlash {
+            complete(
+              HttpEntity(
+                ContentTypes.`application/json`,
+                people.toJson.prettyPrint
+              )
             )
-          )
-        }
+          }
       } ~
-      (post & pathEndOrSingleSlash & extractRequest & extractLog) { (request, log) =>
-        val entity = request.entity
-        val strictEntityFuture = entity.toStrict(2 seconds)
-        val personFuture = strictEntityFuture.map(_.data.utf8String.parseJson.convertTo[Person])
+        (post & pathEndOrSingleSlash & extractRequest & extractLog) {
+          (request, log) =>
+            val entity = request.entity
+            val strictEntityFuture = entity.toStrict(2 seconds)
+            val personFuture = strictEntityFuture.map(
+              _.data.utf8String.parseJson.convertTo[Person]
+            )
 
-        onComplete(personFuture) {
-          case Success(person) =>
-            log.info(s"Got person: $person")
-            people = people :+ person
-            complete(StatusCodes.OK)
-          case Failure(ex) =>
-            failWith(ex)
-        }
+            onComplete(personFuture) { //future directive method from akka http
+              case Success(person) =>
+                log.info(s"Got person: $person")
+                people = people :+ person
+                complete(StatusCodes.OK) //route directive method from akka http
+              case Failure(ex) =>
+                failWith(ex) // route directive method from akka http
+            }
 
-//        // "side-effect"
-//        personFuture.onComplete {
-//          case Success(person) =>
-//            log.info(s"Got person: $person")
-//            people = people :+ person
-//          case Failure(ex) =>
-//            log.warning(s"Something failed with fetching the person from the entity: $ex")
-//        }
+//            // "side-effect"
+//            personFuture.onComplete {
+//              case Success(person) =>
+//                log.info(s"Got person: $person")
+//                people = people :+ person
+//              case Failure(ex) =>
+//                log.warning(
+//                  s"Something failed with fetching the person from the entity: $ex"
+//                )
+//            }
 //
 //        complete(personFuture
 //          .map(_ => StatusCodes.OK)
 //          .recover {
 //            case _ => StatusCodes.InternalServerError
 //          })
-      }
+        }
     }
 
   Http().bindAndHandle(personServerRoute, "localhost", 8080)
