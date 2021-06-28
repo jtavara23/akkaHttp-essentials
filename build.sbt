@@ -18,8 +18,6 @@ libraryDependencies ++= Seq(
   // testing
   "com.typesafe.akka" %% "akka-testkit" % akkaVersion,
   "org.scalatest" %% "scalatest" % scalaTestVersion,
-  
   // JWT
-  "com.pauldijou" %% "jwt-spray-json" % "2.1.0"
-
+  "com.pauldijou" %% "jwt-spray-json" % "2.1.0" // dependency for JWT
 )
