@@ -4,6 +4,7 @@ import java.io.File
 
 import akka.Done
 import akka.actor.ActorSystem
+import akka.event.LoggingAdapter
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.{ContentTypes, HttpEntity, Multipart}
 import akka.stream.ActorMaterializer
@@ -20,8 +21,27 @@ object UploadingFiles extends App {
   implicit val materializer = ActorMaterializer()
   import system.dispatcher
 
-  val filesRoute =
+  def getFilePartsSink(log: LoggingAdapter) =
+    Sink.foreach[Multipart.FormData.BodyPart] { bodyPart =>
+      if (bodyPart.name == "myFile") {
+        // create a file
+        val filename = "src/main/resources/download/" + bodyPart.filename
+          .getOrElse("tempFile_" + System.currentTimeMillis())
+        val file = new File(filename)
 
+        log.info(s"Writing to file: $filename")
+
+        val fileContentsSource: Source[ByteString, _] =
+          bodyPart.entity.dataBytes
+        val fileContentsSink: Sink[ByteString, _] =
+          FileIO.toPath(file.toPath)
+
+        // writing the data to the file
+        fileContentsSource.runWith(fileContentsSink)
+      }
+    }
+
+  val filesRoute =
     (pathEndOrSingleSlash & get) {
       complete(
         HttpEntity(
@@ -39,37 +59,25 @@ object UploadingFiles extends App {
         )
       )
     } ~
-    (path("upload") & extractLog) { log =>
-      // handle uploading files
-      // multipart/form-data
+      (path("upload") & extractLog) { log =>
+        // handle uploading files
+        // multipart/form-data
 
-      entity(as[Multipart.FormData]) { formdata =>
-        // handle file payload
-        val partsSource: Source[Multipart.FormData.BodyPart, Any] = formdata.parts
+        entity(as[Multipart.FormData]) { formdata =>
+          // handle file payload
+          val partsSource: Source[Multipart.FormData.BodyPart, Any] =
+            formdata.parts
 
-        val filePartsSink: Sink[Multipart.FormData.BodyPart, Future[Done]] = Sink.foreach[Multipart.FormData.BodyPart] { bodyPart =>
-          if (bodyPart.name == "myFile") {
-            // create a file
-            val filename = "src/main/resources/download/" + bodyPart.filename.getOrElse("tempFile_" + System.currentTimeMillis())
-            val file = new File(filename)
+          val filePartsSink: Sink[Multipart.FormData.BodyPart, Future[Done]] =
+            getFilePartsSink(log)
 
-            log.info(s"Writing to file: $filename")
-
-            val fileContentsSource: Source[ByteString, _] = bodyPart.entity.dataBytes
-            val fileContentsSink: Sink[ByteString, _] = FileIO.toPath(file.toPath)
-
-            // writing the data to the file
-            fileContentsSource.runWith(fileContentsSink)
+          val writeOperationFuture = partsSource.runWith(filePartsSink)
+          onComplete(writeOperationFuture) {
+            case Success(_)  => complete("File uploaded.")
+            case Failure(ex) => complete(s"File failed to upload: $ex")
           }
         }
-
-        val writeOperationFuture = partsSource.runWith(filePartsSink)
-        onComplete(writeOperationFuture) {
-          case Success(_) => complete("File uploaded.")
-          case Failure(ex) => complete(s"File failed to upload: $ex")
-        }
       }
-    }
 
   Http().bindAndHandle(filesRoute, "localhost", 8080)
 
